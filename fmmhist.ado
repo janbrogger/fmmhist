@@ -1,7 +1,7 @@
-cap program drop fmmhist
-version 17.0
+*! version 1.0.0  13April2022 Jan Brogger jan@brogger.no
 program define fmmhist
-	syntax  , [bins(integer -1) DENSity TItle(passthru) XLAB(passthru) YLAB(passthru) XTItle(passthru) YTItle(passthru) ]
+	version 17.0
+	syntax  , [numbins(integer -1) DENSity TItle(passthru) XLAB(passthru) YLAB(passthru) XTItle(passthru) YTItle(passthru) ]
 	if (substr("`e(cmdline)'",1,4)!="fmm ") {
 		di as error "No previous fmm model found"
 		error 999
@@ -28,31 +28,42 @@ program define fmmhist
 	qui ds `prob'*
 	local classcount : word count `r(varlist)'
 	
-	if (`bins'==-1) {
+	if (`numbins'==-1) {
 		qui summ `outcomevar'
 		local minBin=floor(`r(min)')
+		local belowMinBin=`minBin'-1
 		local maxBin=ceil(`r(max)')
+		local aboveMaxBin=`maxBin'+1
 		local binStep=1	
-		egen `binnedOutcome'=cut(`outcomevar'), at(`minBin'(`binStep')`maxBin')  label
-		local label: variable label `outcomevar'
-		label variable `binnedOutcome' "`label'"
+		egen `binnedOutcome'=cut(`outcomevar'), at( `minBin'(`binStep')`maxBin' )  label
 	}
 	else {
+		
 		qui summ `outcomevar'
+		local belowMinBin=`minBin'-1
 		local minBin=`r(min)'
 		local maxBin=`r(max)'
+		local aboveMaxBin=`maxBin'+1
 		local range=`maxBin'-`minBin'
-		local binStep=`range'/`bins'
-		egen `binnedOutcome'=cut(`outcomevar'), at(`minBin'(`binStep')`maxBin')  label
-		local label: variable label `outcomevar'
-		label variable `binnedOutcome' "`label'"		
+		local binStep=`range'/`numbins'
+				
+		egen `binnedOutcome'=cut(`outcomevar'), at( `minBin'(`binStep')`maxBin' )  label		
 	}
+	local label: variable label `outcomevar'
+	label variable `binnedOutcome' "`label'"
 	
-	collapse (count) `allfreq'=`outcomevar' (mean) `densityvar' (mean) `prob'*  , by(`binnedOutcome')	
+	*Copy outcome value labels	
+	local labelvalues : value label `binnedOutcome'	
+	
+	collapse (count) `allfreq'=`outcomevar' (mean) `densityvar' (mean) `prob'*  , by(`binnedOutcome')		
+	label variable `binnedOutcome' "`label'"
+	*Reapply outcome value labels
+	label var `binnedOutcome' `labelvalues'
+	
 	label variable `densityvar' "Fitted density"	
 	local i=1
 	local graphstatement ""
-	local graphopts ""
+	local graphopts `" xti("`label'") xlab(,valuelabel) "'
 	foreach v of varlist `prob'* {
 		gen `freq'`i'=`v'*`allfreq'
 		label variable `freq'`i' "Count in class `i'"
@@ -77,5 +88,7 @@ program define fmmhist
 	twoway ///		
 		`graphstatement'  ///		
 		, yti("Count", axis(1))	`graphopts'
-restore
+	*list
+	restore
+	
 end
